@@ -38,6 +38,15 @@ export default function HomePage() {
     init()
   }, [init])
 
+  // 没有选中源时自动选择第一个
+  useEffect(() => {
+    if (!hydrated || sources.length === 0 || currentSourceKey) return
+    const firstSite = sources.flatMap((s) => s.sites)[0]
+    if (firstSite) {
+      setCurrentSource(firstSite.key, firstSite)
+    }
+  }, [hydrated, sources, currentSourceKey, setCurrentSource])
+
   // 加载数据源
   useEffect(() => {
     if (!hydrated || sources.length === 0 || !currentSourceKey) return

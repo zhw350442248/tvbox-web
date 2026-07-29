@@ -107,13 +107,44 @@ export const useAppStore = create<AppState>((set, get) => ({
   // 数据源操作
   setSources: async (sources) => {
     await sourceStore.set(sources)
-    set({ sources })
+    const currentSourceKey = await currentSourceStore.get()
+    let newCurrentKey = currentSourceKey
+    let newCurrentSite: SiteBean | null = null
+
+    if (sources.length > 0) {
+      const allSites = sources.flatMap((s) => s.sites)
+      const exists = allSites.some((s) => s.key === currentSourceKey)
+      if (!exists && allSites.length > 0) {
+        newCurrentKey = allSites[0].key
+        newCurrentSite = allSites[0]
+        await currentSourceStore.set(newCurrentKey)
+      } else if (exists) {
+        newCurrentSite = allSites.find((s) => s.key === currentSourceKey) || null
+      }
+    }
+
+    set({ sources, currentSourceKey: newCurrentKey, currentSite: newCurrentSite })
   },
 
   addSource: async (source) => {
     await sourceStore.add(source)
     const sources = await sourceStore.get()
-    set({ sources })
+    const currentSourceKey = await currentSourceStore.get()
+    let newCurrentKey = currentSourceKey
+    let newCurrentSite: SiteBean | null = null
+
+    if (!currentSourceKey && sources.length > 0) {
+      const allSites = sources.flatMap((s) => s.sites)
+      if (allSites.length > 0) {
+        newCurrentKey = allSites[0].key
+        newCurrentSite = allSites[0]
+        await currentSourceStore.set(newCurrentKey)
+      }
+    } else if (currentSourceKey) {
+      newCurrentSite = sources.flatMap((s) => s.sites).find((s) => s.key === currentSourceKey) || null
+    }
+
+    set({ sources, currentSourceKey: newCurrentKey, currentSite: newCurrentSite })
   },
 
   removeSource: async (index) => {
