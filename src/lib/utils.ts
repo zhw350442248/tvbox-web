@@ -1,247 +1,146 @@
-/* eslint-disable @typescript-eslint/no-explicit-any,no-console */
+import { clsx, type ClassValue } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+import CryptoJS from 'crypto-js'
+import type { PlaySource, LiveGroup } from '@/types'
 
-import Hls from 'hls.js';
+// 合并 Tailwind 类名
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
 
-/**
- * 获取图片代理 URL 设置
- */
-export function getImageProxyUrl(): string | null {
-  if (typeof window === 'undefined') return null;
+// 格式化文件大小
+export function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
 
-  // 本地未开启图片代理，则不使用代理
-  const enableImageProxy = localStorage.getItem('enableImageProxy');
-  if (enableImageProxy !== null) {
-    if (!JSON.parse(enableImageProxy) as boolean) {
-      return null;
+// 格式化时间
+export function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+// 格式化日期
+export function formatDate(timestamp: number): string {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  
+  if (diff < 60000) return '刚刚'
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
+  if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`
+  
+  return date.toLocaleDateString()
+}
+
+// 生成唯一ID
+export function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2)
+}
+
+// 解析播放URL字符串
+export function parsePlayUrl(playUrl: string): PlaySource[] {
+  if (!playUrl) return []
+  
+  const sources: PlaySource[] = []
+  const lines = playUrl.split('#').filter(Boolean)
+  
+  let currentSource: PlaySource | null = null
+  
+  for (const line of lines) {
+    const [name, url] = line.split('$')
+    if (name && url) {
+      // 判断是否为播放源名称（不包含$）
+      if (!url.includes('http') && !url.includes('magnet')) {
+        // 新的播放源
+        if (currentSource) {
+          sources.push(currentSource)
+        }
+        currentSource = { name, urls: [] }
+      } else {
+        // 播放地址
+        if (!currentSource) {
+          currentSource = { name: '默认', urls: [] }
+        }
+        currentSource.urls.push({ name, url })
+      }
     }
   }
-
-  const localImageProxy = localStorage.getItem('imageProxyUrl');
-  if (localImageProxy != null) {
-    return localImageProxy.trim() ? localImageProxy.trim() : null;
+  
+  if (currentSource) {
+    sources.push(currentSource)
   }
-
-  // 如果未设置，则使用全局对象
-  const serverImageProxy = (window as any).RUNTIME_CONFIG?.IMAGE_PROXY;
-  return serverImageProxy && serverImageProxy.trim()
-    ? serverImageProxy.trim()
-    : null;
+  
+  return sources
 }
 
-/**
- * 处理图片 URL，如果设置了图片代理则使用代理
- */
-export function processImageUrl(originalUrl: string): string {
-  if (!originalUrl) return originalUrl;
-
-  const proxyUrl = getImageProxyUrl();
-  if (!proxyUrl) return originalUrl;
-
-  return `${proxyUrl}${encodeURIComponent(originalUrl)}`;
-}
-
-/**
- * 获取豆瓣代理 URL 设置
- */
-export function getDoubanProxyUrl(): string | null {
-  if (typeof window === 'undefined') return null;
-
-  // 本地未开启豆瓣代理，则不使用代理
-  const enableDoubanProxy = localStorage.getItem('enableDoubanProxy');
-  if (enableDoubanProxy !== null) {
-    if (!JSON.parse(enableDoubanProxy) as boolean) {
-      return null;
+// 解析直播源
+export function parseLiveContent(content: string, url: string): LiveGroup[] {
+  const groups: LiveGroup[] = []
+  const lines = content.split('\n').filter(Boolean)
+  
+  let currentGroup: LiveGroup | null = null
+  
+  for (const line of lines) {
+    const trimmed = line.trim()
+    
+    // 分组名称
+    if (trimmed.startsWith('#genre#') || trimmed.includes(',#genre#')) {
+      const groupName = trimmed.replace('#genre#', '').replace(',', '').trim()
+      if (currentGroup) {
+        groups.push(currentGroup)
+      }
+      currentGroup = { name: groupName, channels: [] }
+      continue
+    }
+  
+    // 频道
+    const [name, channelUrl] = trimmed.split(',')
+    if (name && channelUrl && currentGroup) {
+      currentGroup.channels.push({
+        name: name.trim(),
+        url: channelUrl.trim(),
+      })
     }
   }
-
-  const localDoubanProxy = localStorage.getItem('doubanProxyUrl');
-  if (localDoubanProxy != null) {
-    return localDoubanProxy.trim() ? localDoubanProxy.trim() : null;
+  
+  if (currentGroup) {
+    groups.push(currentGroup)
   }
-
-  // 如果未设置，则使用全局对象
-  const serverDoubanProxy = (window as any).RUNTIME_CONFIG?.DOUBAN_PROXY;
-  return serverDoubanProxy && serverDoubanProxy.trim()
-    ? serverDoubanProxy.trim()
-    : null;
+  
+  return groups
 }
 
-/**
- * 处理豆瓣 URL，如果设置了豆瓣代理则使用代理
- */
-export function processDoubanUrl(originalUrl: string): string {
-  if (!originalUrl) return originalUrl;
-
-  const proxyUrl = getDoubanProxyUrl();
-  if (!proxyUrl) return originalUrl;
-
-  return `${proxyUrl}${encodeURIComponent(originalUrl)}`;
+// 加密解密工具
+export function encrypt(text: string, key: string): string {
+  return CryptoJS.AES.encrypt(text, key).toString()
 }
 
-export function cleanHtmlTags(text: string): string {
-  if (!text) return '';
-  return text
-    .replace(/<[^>]+>/g, '\n') // 将 HTML 标签替换为换行
-    .replace(/\n+/g, '\n') // 将多个连续换行合并为一个
-    .replace(/[ \t]+/g, ' ') // 将多个连续空格和制表符合并为一个空格，但保留换行符
-    .replace(/^\n+|\n+$/g, '') // 去掉首尾换行
-    .replace(/&nbsp;/g, ' ') // 将 &nbsp; 替换为空格
-    .trim(); // 去掉首尾空格
+export function decrypt(ciphertext: string, key: string): string {
+  const bytes = CryptoJS.AES.decrypt(ciphertext, key)
+  return bytes.toString(CryptoJS.enc.Utf8)
 }
 
-/**
- * 从m3u8地址获取视频质量等级和网络信息
- * @param m3u8Url m3u8播放列表的URL
- * @returns Promise<{quality: string, loadSpeed: string, pingTime: number}> 视频质量等级和网络信息
- */
-export async function getVideoResolutionFromM3u8(m3u8Url: string): Promise<{
-  quality: string; // 如720p、1080p等
-  loadSpeed: string; // 自动转换为KB/s或MB/s
-  pingTime: number; // 网络延迟（毫秒）
-}> {
-  try {
-    // 直接使用m3u8 URL作为视频源，避免CORS问题
-    return new Promise((resolve, reject) => {
-      const video = document.createElement('video');
-      video.muted = true;
-      video.preload = 'metadata';
-
-      // 测量网络延迟（ping时间） - 使用m3u8 URL而不是ts文件
-      const pingStart = performance.now();
-      let pingTime = 0;
-
-      // 测量ping时间（使用m3u8 URL）
-      fetch(m3u8Url, { method: 'HEAD', mode: 'no-cors' })
-        .then(() => {
-          pingTime = performance.now() - pingStart;
-        })
-        .catch(() => {
-          pingTime = performance.now() - pingStart; // 记录到失败为止的时间
-        });
-
-      // 固定使用hls.js加载
-      const hls = new Hls();
-
-      // 设置超时处理
-      const timeout = setTimeout(() => {
-        hls.destroy();
-        video.remove();
-        reject(new Error('Timeout loading video metadata'));
-      }, 4000);
-
-      video.onerror = () => {
-        clearTimeout(timeout);
-        hls.destroy();
-        video.remove();
-        reject(new Error('Failed to load video metadata'));
-      };
-
-      let actualLoadSpeed = '未知';
-      let hasSpeedCalculated = false;
-      let hasMetadataLoaded = false;
-
-      let fragmentStartTime = 0;
-
-      // 检查是否可以返回结果
-      const checkAndResolve = () => {
-        if (
-          hasMetadataLoaded &&
-          (hasSpeedCalculated || actualLoadSpeed !== '未知')
-        ) {
-          clearTimeout(timeout);
-          const width = video.videoWidth;
-          if (width && width > 0) {
-            hls.destroy();
-            video.remove();
-
-            // 根据视频宽度判断视频质量等级，使用经典分辨率的宽度作为分割点
-            const quality =
-              width >= 3840
-                ? '4K' // 4K: 3840x2160
-                : width >= 2560
-                ? '2K' // 2K: 2560x1440
-                : width >= 1920
-                ? '1080p' // 1080p: 1920x1080
-                : width >= 1280
-                ? '720p' // 720p: 1280x720
-                : width >= 854
-                ? '480p'
-                : 'SD'; // 480p: 854x480
-
-            resolve({
-              quality,
-              loadSpeed: actualLoadSpeed,
-              pingTime: Math.round(pingTime),
-            });
-          } else {
-            // webkit 无法获取尺寸，直接返回
-            resolve({
-              quality: '未知',
-              loadSpeed: actualLoadSpeed,
-              pingTime: Math.round(pingTime),
-            });
-          }
-        }
-      };
-
-      // 监听片段加载开始
-      hls.on(Hls.Events.FRAG_LOADING, () => {
-        fragmentStartTime = performance.now();
-      });
-
-      // 监听片段加载完成，只需首个分片即可计算速度
-      hls.on(Hls.Events.FRAG_LOADED, (event: any, data: any) => {
-        if (
-          fragmentStartTime > 0 &&
-          data &&
-          data.payload &&
-          !hasSpeedCalculated
-        ) {
-          const loadTime = performance.now() - fragmentStartTime;
-          const size = data.payload.byteLength || 0;
-
-          if (loadTime > 0 && size > 0) {
-            const speedKBps = size / 1024 / (loadTime / 1000);
-
-            // 立即计算速度，无需等待更多分片
-            const avgSpeedKBps = speedKBps;
-
-            if (avgSpeedKBps >= 1024) {
-              actualLoadSpeed = `${(avgSpeedKBps / 1024).toFixed(1)} MB/s`;
-            } else {
-              actualLoadSpeed = `${avgSpeedKBps.toFixed(1)} KB/s`;
-            }
-            hasSpeedCalculated = true;
-            checkAndResolve(); // 尝试返回结果
-          }
-        }
-      });
-
-      hls.loadSource(m3u8Url);
-      hls.attachMedia(video);
-
-      // 监听hls.js错误
-      hls.on(Hls.Events.ERROR, (event: any, data: any) => {
-        console.error('HLS错误:', data);
-        if (data.fatal) {
-          clearTimeout(timeout);
-          hls.destroy();
-          video.remove();
-          reject(new Error(`HLS播放失败: ${data.type}`));
-        }
-      });
-
-      // 监听视频元数据加载完成
-      video.onloadedmetadata = () => {
-        hasMetadataLoaded = true;
-        checkAndResolve(); // 尝试返回结果
-      };
-    });
-  } catch (error) {
-    throw new Error(
-      `Error getting video resolution: ${
-        error instanceof Error ? error.message : String(error)
-      }`
-    );
+// Base64 编解码
+export function base64Encode(str: string): string {
+  if (typeof window !== 'undefined') {
+    return btoa(unescape(encodeURIComponent(str)))
   }
+  return Buffer.from(str).toString('base64')
+}
+
+export function base64Decode(str: string): string {
+  if (typeof window !== 'undefined') {
+    return decodeURIComponent(escape(atob(str)))
+  }
+  return Buffer.from(str, 'base64').toString()
 }
