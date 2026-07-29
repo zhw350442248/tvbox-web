@@ -2,17 +2,38 @@ import localforage from 'localforage'
 import type { HistoryItem, CollectItem, DriveConfig, SourceConfig } from '@/types'
 
 // 配置 localforage
+// 注意：name/storeName 变更后旧数据会被隔离，避免旧版项目（KatelyaTV）存的不兼容数据被读取。
 localforage.config({
-  name: 'tvbox-web',
+  name: 'tvbox-web-v2',
   version: 1.0,
   storeName: 'tvbox',
 })
 
+// 校验数据源配置是否合法，防止本地缓存里的旧/坏数据导致 flatMap 报错
+function isValidSourceConfig(v: any): v is SourceConfig {
+  return (
+    v &&
+    typeof v === 'object' &&
+    Array.isArray(v.sites) &&
+    v.sites.every(
+      (s: any) =>
+        s &&
+        typeof s === 'object' &&
+        typeof s.key === 'string' &&
+        typeof s.name === 'string' &&
+        typeof s.api === 'string' &&
+        typeof s.type === 'number'
+    )
+  )
+}
+
 // 数据源存储
 export const sourceStore = {
   async get(): Promise<SourceConfig[]> {
-    const data = await localforage.getItem<SourceConfig[]>('sources')
-    return data || []
+    const data = await localforage.getItem<any[]>('sources')
+    if (!Array.isArray(data)) return []
+    // 过滤掉不兼容/损坏的数据，避免后续 flatMap 等操作报错
+    return data.filter(isValidSourceConfig)
   },
 
   async set(sources: SourceConfig[]): Promise<void> {

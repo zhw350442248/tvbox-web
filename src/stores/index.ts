@@ -90,11 +90,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   // 初始化
   init: async () => {
     const sources = await sourceStore.get()
-    const currentSourceKey = await currentSourceStore.get()
+    let currentSourceKey = await currentSourceStore.get()
     const history = await historyStore.get()
     const collects = await collectStore.get()
     const drives = await driveStore.get()
-    
+
+    // 如果当前选中的源在已保存的源里不存在，清空它，避免后续渲染/请求异常
+    if (currentSourceKey) {
+      const exists = sources.some((s) =>
+        (s.sites || []).some((site) => site.key === currentSourceKey)
+      )
+      if (!exists) {
+        currentSourceKey = null
+        await currentSourceStore.set('')
+      }
+    }
+
     set({
       sources,
       currentSourceKey,
@@ -106,13 +117,17 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // 数据源操作
   setSources: async (sources) => {
-    await sourceStore.set(sources)
+    // 写入前过滤一遍，保证本地缓存始终干净
+    const cleanSources = sources.filter(
+      (s) => s && Array.isArray(s.sites) && s.sites.length > 0
+    )
+    await sourceStore.set(cleanSources)
     const currentSourceKey = await currentSourceStore.get()
     let newCurrentKey = currentSourceKey
     let newCurrentSite: SiteBean | null = null
 
-    if (sources.length > 0) {
-      const allSites = sources.flatMap((s) => s.sites)
+    if (cleanSources.length > 0) {
+      const allSites = cleanSources.flatMap((s) => s.sites || [])
       const exists = allSites.some((s) => s.key === currentSourceKey)
       if (!exists && allSites.length > 0) {
         newCurrentKey = allSites[0].key
@@ -123,10 +138,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
 
-    set({ sources, currentSourceKey: newCurrentKey, currentSite: newCurrentSite })
+    set({ sources: cleanSources, currentSourceKey: newCurrentKey, currentSite: newCurrentSite })
   },
 
   addSource: async (source) => {
+    if (!source || !Array.isArray(source.sites) || source.sites.length === 0) {
+      throw new Error('非法数据源')
+    }
     await sourceStore.add(source)
     const sources = await sourceStore.get()
     const currentSourceKey = await currentSourceStore.get()
@@ -134,14 +152,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     let newCurrentSite: SiteBean | null = null
 
     if (!currentSourceKey && sources.length > 0) {
-      const allSites = sources.flatMap((s) => s.sites)
+      const allSites = sources.flatMap((s) => s.sites || [])
       if (allSites.length > 0) {
         newCurrentKey = allSites[0].key
         newCurrentSite = allSites[0]
         await currentSourceStore.set(newCurrentKey)
       }
     } else if (currentSourceKey) {
-      newCurrentSite = sources.flatMap((s) => s.sites).find((s) => s.key === currentSourceKey) || null
+      newCurrentSite = sources.flatMap((s) => s.sites || []).find((s) => s.key === currentSourceKey) || null
     }
 
     set({ sources, currentSourceKey: newCurrentKey, currentSite: newCurrentSite })

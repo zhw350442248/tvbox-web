@@ -41,7 +41,7 @@ export default function HomePage() {
   // 没有选中源时自动选择第一个
   useEffect(() => {
     if (!hydrated || sources.length === 0 || currentSourceKey) return
-    const firstSite = sources.flatMap((s) => s.sites)[0]
+    const firstSite = sources.flatMap((s) => s.sites || [])[0]
     if (firstSite) {
       setCurrentSource(firstSite.key, firstSite)
     }
@@ -118,15 +118,18 @@ export default function HomePage() {
           {/* 数据源选择 */}
           <div className="p-4 border-b border-dark-700">
             <label className="text-sm text-gray-400 mb-2 block">数据源</label>
-            <select 
+            <select
               className="input text-sm"
               value={currentSourceKey || ''}
-              onChange={(e) => setCurrentSource(e.target.value, 
-                sources.flatMap(s => s.sites).find(site => site.key === e.target.value) || null as any
-              )}
+              onChange={(e) => {
+                const key = e.target.value
+                if (!key) return
+                const site = sources.flatMap((s) => s.sites || []).find((s) => s.key === key)
+                if (site) setCurrentSource(key, site)
+              }}
             >
               <option value="">选择数据源</option>
-              {sources.flatMap(source => source.sites).map(site => (
+              {sources.flatMap((source) => source.sites || []).map((site) => (
                 <option key={site.key} value={site.key}>{site.name}</option>
               ))}
             </select>

@@ -202,19 +202,19 @@ export default function SettingsPage() {
                             )}
                           </div>
                           <p className="text-sm text-gray-400 mt-1">
-                            {source.sites.length} 个站点
+                            {source.sites?.length || 0} 个站点
                             {source.lives && source.lives.length > 0 && ` · ${source.lives.length} 个直播源`}
                           </p>
-                          
+
                           {/* 站点列表 */}
                           <div className="flex flex-wrap gap-2 mt-3">
-                            {source.sites.slice(0, 5).map((site) => (
+                            {(source.sites || []).slice(0, 5).map((site) => (
                               <span key={site.key} className="tag text-xs">
                                 {site.name}
                               </span>
                             ))}
-                            {source.sites.length > 5 && (
-                              <span className="tag text-xs">+{source.sites.length - 5}</span>
+                            {(source.sites?.length || 0) > 5 && (
+                              <span className="tag text-xs">+{(source.sites?.length || 0) - 5}</span>
                             )}
                           </div>
                         </div>
