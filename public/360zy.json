@@ -1,0 +1,13 @@
+{
+  "spider": "",
+  "sites": [
+    {
+      "key": "360zy",
+      "name": "360zy 资源 (普通CMS源)",
+      "type": 3,
+      "api": "https://360zy.com/api.php/provide/vod/",
+      "search": 1
+    }
+  ],
+  "lives": []
+}
