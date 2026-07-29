@@ -27,7 +27,7 @@ export default function SettingsPage() {
     setMessage(null)
     
     try {
-      const response = await fetch(sourceUrl)
+      const response = await fetch(`/api/proxy?url=${encodeURIComponent(sourceUrl)}`)
       const config: SourceConfig = await response.json()
       
       // 验证配置

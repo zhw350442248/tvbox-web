@@ -6,6 +6,29 @@ const request = axios.create({
   timeout: 15000,
 })
 
+// 通过同源代理转发请求，解决浏览器跨域(CORS)问题
+// 源站接口大多未开启 CORS，前端直连会被浏览器拦截；改为请求本站的 /api/proxy，由服务端拉取后返回
+function proxyGet(
+  url: string,
+  config?: { params?: Record<string, any>; timeout?: number }
+) {
+  try {
+    const u = new URL(url)
+    if (config?.params) {
+      for (const [k, v] of Object.entries(config.params)) {
+        if (v !== undefined && v !== null) {
+          u.searchParams.set(k, String(v))
+        }
+      }
+    }
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(u.toString())}`
+    return request.get(proxyUrl)
+  } catch {
+    // 非标准 URL 时回退直连
+    return request.get(url, config)
+  }
+}
+
 // TVBox API 服务
 export class TVBoxApi {
   private source: SourceConfig
@@ -25,7 +48,7 @@ export class TVBoxApi {
       
       // Spider 类型
       if (this.site.type === 4 && this.spiderUrl) {
-        const response = await request.get(this.spiderUrl, {
+        const response = await proxyGet(this.spiderUrl, {
           params: {
             api: url,
             ac: 'list',
@@ -36,7 +59,7 @@ export class TVBoxApi {
 
       // CMS 类型
       if (this.site.type === 3 || this.site.type === 1) {
-        const response = await request.get(url, {
+        const response = await proxyGet(url, {
           params: { ac: 'list' },
         })
         return this.parseCategories(response.data)
@@ -60,7 +83,7 @@ export class TVBoxApi {
 
       // Spider 类型
       if (this.site.type === 4 && this.spiderUrl) {
-        const response = await request.get(this.spiderUrl, {
+        const response = await proxyGet(this.spiderUrl, {
           params: {
             api: url,
             ac: 'list',
@@ -73,7 +96,7 @@ export class TVBoxApi {
       }
 
       // CMS 类型
-      const response = await request.get(url, {
+      const response = await proxyGet(url, {
         params: {
           ac: 'list',
           t: typeId,
@@ -95,7 +118,7 @@ export class TVBoxApi {
 
       // Spider 类型
       if (this.site.type === 4 && this.spiderUrl) {
-        const response = await request.get(this.spiderUrl, {
+        const response = await proxyGet(this.spiderUrl, {
           params: {
             api: url,
             ac: 'detail',
@@ -106,7 +129,7 @@ export class TVBoxApi {
       }
 
       // CMS 类型
-      const response = await request.get(url, {
+      const response = await proxyGet(url, {
         params: {
           ac: 'detail',
           ids: ids.join(','),
@@ -130,7 +153,7 @@ export class TVBoxApi {
 
       // Spider 类型
       if (this.site.type === 4 && this.spiderUrl) {
-        const response = await request.get(this.spiderUrl, {
+        const response = await proxyGet(this.spiderUrl, {
           params: {
             api: url,
             ac: 'detail',
@@ -143,7 +166,7 @@ export class TVBoxApi {
       }
 
       // CMS 类型
-      const response = await request.get(url, {
+      const response = await proxyGet(url, {
         params: {
           ac: 'detail',
           wd: keyword,
@@ -165,7 +188,7 @@ export class TVBoxApi {
 
       // Spider 类型
       if (this.site.type === 4 && this.spiderUrl) {
-        const response = await request.get(this.spiderUrl, {
+        const response = await proxyGet(this.spiderUrl, {
           params: {
             api: url,
             ac: 'player',
@@ -254,7 +277,7 @@ export class TVBoxApi {
 
 // 直播源解析
 export async function fetchLiveChannels(url: string): Promise<string> {
-  const response = await request.get(url)
+  const response = await proxyGet(url)
   return response.data
 }
 
